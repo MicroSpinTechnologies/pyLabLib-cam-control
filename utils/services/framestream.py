@@ -10,6 +10,7 @@ from pylablib.thread.stream import frameproc, table_accum, stream_manager
 import time
 import collections
 import numpy as np
+import tifffile
 import imageio
 import os
 
