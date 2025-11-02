@@ -807,8 +807,9 @@ class FrameSaveThread(controller.QTaskThread):
                 if self._tiff_writer is None:
                     self._tiff_writer = imageio.get_writer(self._make_path(), format="tiff", bigtiff=self.format == "bigtiff", mode="V")
                 for f in frames:
+                    scaled_16bit = ((f - np.min(f)) / (np.max(f) - np.min(f)) * 65535).astype(np.uint16)
                     try:
-                        self._write_tiff(f)
+                        self._write_tiff(scaled_16bit)
                         nsaved += len(f)
                     except ValueError:
                         raise FrameWriteError(nsaved, kind="tiff_size_exceeded")
