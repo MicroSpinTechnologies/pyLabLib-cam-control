@@ -21,6 +21,16 @@ Installation
 
 To install cam-control, download the latest version from `GitHub <https://github.com/AlexShkarin/pylablib-cam-control/releases/latest/download/cam-control.zip>`__ as a self-contained Zip file and then follow further `instructions <https://pylablib-cam-control.readthedocs.io/en/latest/overview.html#overview-install>`__ for how to run it.
 
+Running this fork from source
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This fork runs from a checkout with `uv <https://docs.astral.sh/uv/>`__, which fetches Python 3.9 and the pinned packages from ``pyproject.toml`` / ``uv.lock`` on first start::
+
+    git checkout fix/raw-tiff-and-control-server
+    run-cam-control.bat
+
+The camera's own driver (e.g., Hamamatsu DCAM-API) still has to be installed separately. The control server that SpinApp connects to is enabled in ``settings.cfg`` and listens on ``127.0.0.1:18923``; the address in use is shown on the ``Plugins`` tab.
+
 
 Documentation
 ~~~~~~~~~~~~~~~~~~
