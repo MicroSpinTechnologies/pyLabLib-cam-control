@@ -102,7 +102,7 @@ class SimulatedCamera(camera.IROICamera, camera.IExposureCamera):
     _support_chunks=True
     def _get_base_frame(self):
         """Generate the base static noise-free frame"""
-        xs,ys=np.meshgrid(np.arange(self._size[0]),np.arange(self._size[1]),indexing="ij")
+        xs,ys=np.meshgrid(np.arange(self._size[0]),np.arange(self._size[1]),indexing="xy")  # rows x columns, so a non-square size keeps its width
         ip,jp=self._size[0]/2,self._size[1]/2
         iw,jw=self._size[0]/10,self._size[0]/20
         mag=1024

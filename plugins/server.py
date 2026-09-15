@@ -338,6 +338,31 @@ class ServerCommThread(controller.QTaskThread):
         return rows
 
 
+def _apply_camera_parameters(camera, parameters):
+    """Apply camera parameters in the camera thread, leaving its status consistent if the camera refuses them"""
+    status = camera.sv["status/acquisition"]
+    try:
+        camera.apply_parameters(parameters)
+    except Exception:
+        # The camera thread only puts back its acquisition status ("Setting up...") and re-reads the
+        # parameters when applying succeeds, so a refused value would leave both stale.
+        camera._set_acquisition_status(status)
+        try:
+            camera.update_parameters()
+        except Exception:
+            pass
+        raise
+
+
+def _send_software_trigger(camera):
+    """Send a software trigger in the camera thread; raise if the camera is not connected"""
+    # The generic device method call quietly does nothing for a closed device, which would be answered
+    # with "success" and leave the client waiting for a frame that never comes.
+    if not camera.is_opened():
+        raise RuntimeError("the camera is not connected in cam-control")
+    camera.device.send_software_trigger()
+
+
 class ServerPlugin(base.IPlugin):
     _class_name = "server"
     _default_start_order = 100
@@ -418,9 +443,9 @@ class ServerPlugin(base.IPlugin):
         # outcome for a remote client and has to come back as an error reply.
         camera = self.extctls["camera"]
         if action == "param/set":
-            camera.call_in_thread_sync(camera.apply_parameters, args=(value,), silent=True, pass_exception=True)
+            camera.call_in_thread_sync(_apply_camera_parameters, args=(camera, value), silent=True, pass_exception=True)
         if action == "trigger":
-            camera.call_in_thread_sync(camera._device_method, args=("send_software_trigger", [], {}), silent=True, pass_exception=True)
+            camera.call_in_thread_sync(_send_software_trigger, args=(camera,), silent=True, pass_exception=True)
 
     def get_frame_stream_parameters(self):
         """Get parameters required for the subscription to the camera source"""
