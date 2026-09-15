@@ -44,6 +44,7 @@ class CamAttributesBrowser(cam_attributes_browser.CamAttributesBrowser):
 class Settings_GUI(GenericCameraSettings_GUI):
     _bin_kind="same"
     _frame_period_kind="indicator"
+    _trigger_modes={"int":"Internal","ext":"External","software":"Software"}
     def setup_settings_tables(self):
         super().setup_settings_tables()
         self.add_parameter(cam_gui_parameters.EnumGUIParameter(self,"readout_speed","Readout speed",{"slow":"Slow","normal":"Normal","fast":"Fast"}),"advanced")

@@ -143,3 +143,56 @@ class SimulatedCameraDescriptor(ICameraDescriptor):
         return GenericCameraSettings_GUI(parent,cam_desc=self)
     def make_gui_status(self, parent):
         return GenericCameraStatus_GUI(parent,cam_desc=self)
+
+
+
+class SoftwareTriggeredSimulatedCamera(SimulatedCamera):
+    """
+    Simulated camera with a DCAM-like software trigger.
+
+    In ``"software"`` trigger mode a frame is produced one exposure after each :meth:`send_software_trigger` call,
+    and a trigger sent while acquisition is stopped raises, as a real camera refuses it.
+    Meant for rehearsing externally triggered recording (e.g., through the control server) without hardware.
+    """
+    def __init__(self, size=(1024,1024)):
+        super().__init__(size=size)
+        self._trigger_mode="int"
+        self._trigger_times=[]
+        self._add_settings_variable("trigger_mode",self.get_trigger_mode,self.set_trigger_mode)
+    def get_trigger_mode(self):
+        return self._trigger_mode
+    @camera.acqstopped
+    def set_trigger_mode(self, mode):
+        if mode not in ("int","software"):
+            raise ValueError("unsupported trigger mode: {}".format(mode))
+        self._trigger_mode=mode
+        return mode
+    def send_software_trigger(self):
+        if not self.acquisition_in_progress() or self._trigger_mode!="software":
+            raise RuntimeError("camera is not waiting for a software trigger")
+        self._trigger_times.append(time.time()+self._exposure)
+    def start_acquisition(self, *args, **kwargs):
+        super().start_acquisition(*args,**kwargs)
+        self._trigger_times=[]
+    def _get_acquired_frames(self):
+        if self._acquistion_started is None or self._trigger_mode!="software":
+            return super()._get_acquired_frames()
+        now=time.time()
+        return sum(1 for t in self._trigger_times if t<=now)
+
+class SoftwareTriggeredSimulatedCameraThread(SimulatedCameraThread):
+    parameter_variables=SimulatedCameraThread.parameter_variables|{"trigger_mode"}
+    def connect_device(self):
+        self.device=SoftwareTriggeredSimulatedCamera(size=self.cam_size)
+
+class SoftwareTriggeredSettings_GUI(GenericCameraSettings_GUI):
+    _trigger_modes={"int":"Internal","software":"Software"}
+
+class SoftwareTriggeredSimulatedCameraDescriptor(SimulatedCameraDescriptor):
+    _cam_kind="simulated_software_trigger"
+    def get_kind_name(self):
+        return "Simulated camera with software trigger"
+    def make_thread(self, name):
+        return SoftwareTriggeredSimulatedCameraThread(name=name,kwargs=self.settings["params"].as_dict())
+    def make_gui_control(self, parent):
+        return SoftwareTriggeredSettings_GUI(parent,cam_desc=self)
