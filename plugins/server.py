@@ -413,10 +413,14 @@ class ServerPlugin(base.IPlugin):
         if action == "param/get":
             name = value or ""
             return self.extctls["camera"].v["parameters", name]
+        # Not thread commands: an exception raised by a command stops the camera thread, while a
+        # refused setting or trigger (acquisition stopped, wrong trigger mode) is an ordinary
+        # outcome for a remote client and has to come back as an error reply.
+        camera = self.extctls["camera"]
         if action == "param/set":
-            self.extctls["camera"].cs.apply_parameters(value)
+            camera.call_in_thread_sync(camera.apply_parameters, args=(value,), silent=True, pass_exception=True)
         if action == "trigger":
-            self.extctls["camera"].cs._device_method("send_software_trigger", [], {})
+            camera.call_in_thread_sync(camera._device_method, args=("send_software_trigger", [], {}), silent=True, pass_exception=True)
 
     def get_frame_stream_parameters(self):
         """Get parameters required for the subscription to the camera source"""
