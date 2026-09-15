@@ -10,7 +10,6 @@ from pylablib.thread.stream import frameproc, table_accum, stream_manager
 import time
 import collections
 import numpy as np
-import tifffile
 import imageio
 import os
 
@@ -807,9 +806,8 @@ class FrameSaveThread(controller.QTaskThread):
                 if self._tiff_writer is None:
                     self._tiff_writer = imageio.get_writer(self._make_path(), format="tiff", bigtiff=self.format == "bigtiff", mode="V")
                 for f in frames:
-                    scaled_16bit = ((f - np.min(f)) / (np.max(f) - np.min(f)) * 65535).astype(np.uint16)
                     try:
-                        self._write_tiff(scaled_16bit)
+                        self._write_tiff(f)
                         nsaved += len(f)
                     except ValueError:
                         raise FrameWriteError(nsaved, kind="tiff_size_exceeded")
