@@ -381,6 +381,12 @@ These requests directly control the camera:
   
     - ``{"name": "cam/param/set", "args": {"exposure": 0.1, "roi": [0, 256, 0, 256]}}`` set the camera exposure to 0.1 s and ROI to span from 0 to 256 on both axes
 
+- ``"cam/trigger"``: send a software trigger, which exposes one frame; the camera has to be in the ``"software"`` trigger mode (set with ``cam/param/set``) with acquisition running, and not every camera supports it
+  
+  - *Reply args*:
+  
+    - ``"result"``: should be ``"success"`` if the trigger was sent; if the camera refused it, the reply is a ``"trigger_failed"`` error
+
 
 Streaming requests
 *************************
@@ -451,6 +457,8 @@ The streaming is done through requests, which means that it requires an intermed
   
     - ``"first_index"``: index of the first transferred frame
     - ``"last_index"``: index of the last transferred frame
+    - ``"frame_info"``: present only if frame info acquisition is enabled in the camera settings (``Acquire frame info``); a list with one row per transferred frame, whose columns are named by ``"frame_info_fields"`` (e.g., frame index, acquisition PC timestamp in ms, frame size, and camera-specific entries such as framestamp and timestamps)
+    - ``"frame_info_fields"``: names of the ``"frame_info"`` columns
     - the frames data is contained in the payload as described above
   
   - *Examples*:

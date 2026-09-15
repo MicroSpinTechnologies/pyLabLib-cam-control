@@ -40,6 +40,7 @@ class ServerCommThread(controller.QTaskThread):
         self.frames_cnt = StreamIDCounter()
         self.frames_accum = FramesAccumulator()
         self.frames_accum_size = 0
+        self.frame_info_fields = None
 
     def finalize_task(self):
         self.socket.close()
@@ -93,6 +94,8 @@ class ServerCommThread(controller.QTaskThread):
 
     def receive_frames(self, src, tag, msg):
         """Receive camera frames and store them in the accumulator"""
+        if msg.metainfo.get("frame_info_fields"):
+            self.frame_info_fields = list(msg.metainfo["frame_info_fields"])
         if self.frames_cnt.receive_message(msg):
             self.frames_accum.clear()
         if self.frames_accum_size > 0:
@@ -244,7 +247,18 @@ class ServerCommThread(controller.QTaskThread):
                 raise IncomingMessageError("wrong_argument", "Could not find camera parameter '{}'".format(value_name), {"value": value_name})
         if name == "param/set":
             args = dictionary.Dictionary(args).map_self(lambda v: tuple(v) if isinstance(v, list) else v)  # JSON turns tuples into lists
-            self.plugin.cam_control(name, value=args)
+            try:
+                self.plugin.cam_control(name, value=args)
+            except Exception as e:
+                raise IncomingMessageError("wrong_argument", "Could not apply camera parameters: {}".format(e), {"value": self._as_dict(args)})
+            return "success"
+        if name == "trigger":
+            # Exposes one frame in software trigger mode. Failing here (wrong trigger mode, acquisition
+            # not running) must come back as an error reply rather than an exception in this thread.
+            try:
+                self.plugin.cam_control(name)
+            except Exception as e:
+                raise IncomingMessageError("trigger_failed", "Software trigger failed: {}".format(e), {})
             return "success"
         raise IncomingMessageError("wrong_request", "Unrecognized camera request '{}'".format(name), {"value": name})
 
@@ -279,15 +293,15 @@ class ServerCommThread(controller.QTaskThread):
             n = self.frames_accum.nframes()
             peek = bool(args.get("peek", False))
             if nread is None:
-                frames, indices, _ = self.frames_accum.get_slice(0)
+                frames, indices, infos = self.frames_accum.get_slice(0)
                 if not peek:
                     self.frames_accum.clear()
             elif nread >= 0:
-                frames, indices, _ = self.frames_accum.get_slice(0, nread)
+                frames, indices, infos = self.frames_accum.get_slice(0, nread)
                 if not peek:
                     self.frames_accum.cut_to_size(max(0, n - nread), from_end=True)
             else:
-                frames, indices, _ = self.frames_accum.get_slice(nread, None)
+                frames, indices, infos = self.frames_accum.get_slice(nread, None)
                 if not peek:
                     self.frames_accum.clear()
             if frames:
@@ -302,7 +316,26 @@ class ServerCommThread(controller.QTaskThread):
             else:
                 payload = np.zeros((0, 0, 0), dtype="<u2")
                 fidx = lidx = 0
-            return {"payload": payload, "first_index": int(fidx), "last_index": int(lidx)}
+            result = {"payload": payload, "first_index": int(fidx), "last_index": int(lidx)}
+            info_rows = self._frame_info_rows(frames, infos)
+            if info_rows is not None:
+                result["frame_info"] = info_rows
+                result["frame_info_fields"] = self.frame_info_fields
+            return result
+
+    @staticmethod
+    def _frame_info_rows(frames, infos):
+        """One frame info row per frame (``None`` where a frame has none), or ``None`` if no frame has any"""
+        if not frames or infos is None or all(inf is None for inf in infos):
+            return None
+        rows = []
+        for frame, info in zip(frames, infos):
+            count = len(frame) if frame.ndim == 3 else 1
+            if info is None:
+                rows += [None] * count
+            else:
+                rows += np.asarray(info).reshape(count, -1).tolist()
+        return rows
 
 
 class ServerPlugin(base.IPlugin):
@@ -382,6 +415,8 @@ class ServerPlugin(base.IPlugin):
             return self.extctls["camera"].v["parameters", name]
         if action == "param/set":
             self.extctls["camera"].cs.apply_parameters(value)
+        if action == "trigger":
+            self.extctls["camera"].cs._device_method("send_software_trigger", [], {})
 
     def get_frame_stream_parameters(self):
         """Get parameters required for the subscription to the camera source"""
