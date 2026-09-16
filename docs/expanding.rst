@@ -221,6 +221,8 @@ The last possible field (not shown above) is ``"payload"``, which signifies that
 
 The requests and replies normally have the same format, with the reply typically having the same name but different set of arguments. The error messages have ``"name"`` parameter describing the kind of error (e.g., ``"wrong_request`` or ``"wrong_argument"``), ``"description"`` field with the text description and ``"args"`` field with further arguments depending on the error kind.
 
+Any request which fails for an unforeseen reason (i.e., not covered by a more specific error kind) is answered with the ``"request_failed"`` error, whose ``"description"`` contains the exception type and message. Such a failure never closes the connection.
+
 Finally, note again that in request only ``"parameters"`` field is necessary. Hence, the command above can be shortened to ``{"parameters":{"name":"cam/param/get","args":{"name":"exposure"}}}`` and, e.g., to start camera acquisition you can simply send ``{"parameters":{"name":"cam/acq/start"}}``.
 
 
@@ -363,6 +365,8 @@ These requests directly control the camera:
   
     - ``"name"``: parameter name, same as in request
     - ``"value"``: parameter value; can be a dictionary
+  
+  Values which have no JSON equivalent (e.g., the camera attribute descriptions under ``"aux/camera_attributes_desc"``, which are returned when all parameters are requested) are converted into dictionaries of their public attributes, or into their text representation if they have none.
   
   - *Examples*:
   

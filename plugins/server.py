@@ -9,6 +9,29 @@ import numpy as np
 import json
 
 
+def _json_default(value):
+    """
+    Describe a value which JSON can not serialize on its own.
+
+    Camera parameters can contain arbitrary objects (e.g., ``aux/camera_attributes_desc`` holds
+    ``DCAMAttribute`` instances), and a reply that can not be serialized used to kill the communication thread.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (set, frozenset)):
+        return list(value)
+    if isinstance(value, (bytes, bytearray)):
+        return py3.as_str(bytes(value))
+    if hasattr(value, "_asdict"):  # namedtuples, which are used for many device descriptions
+        return dict(value._asdict())
+    attributes = getattr(value, "__dict__", None)
+    if attributes:  # generic objects such as camera attribute descriptions
+        return {k: v for k, v in attributes.items() if not k.startswith("_")}
+    return str(value)
+
+
 class IncomingMessageError(IOError):
     """Error indicating problems with the incoming request"""
 
@@ -111,7 +134,7 @@ class ServerCommThread(controller.QTaskThread):
         if "payload" in msg:
             payload = msg["payload"]
             msg["payload"] = {"shape": payload.shape, "dtype": payload.dtype.str, "nbytes": payload.nbytes}
-        self.socket.send_fixedlen(json.dumps(msg))
+        self.socket.send_fixedlen(json.dumps(msg, default=_json_default))
         if payload is not None:
             self.socket.send_fixedlen(payload.tobytes())
 
@@ -143,10 +166,17 @@ class ServerCommThread(controller.QTaskThread):
             try:
                 msg = self.recv_message()
                 reply = self.process_message(msg)  # pylint: disable=assignment-from-none
+                if reply is not None:
+                    self.send_message(reply)
             except IncomingMessageError as error:
-                reply = self._build_error_message(error)
-            if reply is not None:
-                self.send_message(reply)
+                self.send_message(self._build_error_message(error))
+            except (net.SocketTimeout, net.SocketError):
+                raise
+            except Exception as error:  # pylint: disable=broad-except
+                # An unexpected failure while fulfilling a request (including a reply which can not be
+                # serialized) is the client's problem; it comes back as an error reply rather than
+                # tearing down this communication thread.
+                self.send_message(self._build_error_message(IncomingMessageError("request_failed", "{}: {}".format(type(error).__name__, error))))
         except net.SocketTimeout:
             pass
         except net.SocketError:
